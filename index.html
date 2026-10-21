@@ -10,7 +10,7 @@
   <meta name="format-detection" content="telephone=no">
   <meta name="msapplication-tap-highlight" content="no">
 
-  <link rel="png" type="image/x-icon" href="mobileFleet-main\resources\ios\icon\icon-1024 (Personalizado).png">
+  <link rel="icon" type="image/png" href="mobileFleet-main/resources/ios/icon/icon-1024%20(Personalizado).png">
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#4e8ef7">
 
@@ -42,6 +42,23 @@
 
   <!-- The polyfills js is generated during the build process -->
   <script src="build/polyfills.js"></script>
+
+  <!-- Fix Street View preto: o zone.js antigo (Ionic 3 / Angular 5) não tem Promise.finally,
+       que o Google Maps (imagery_viewer.js) passou a usar. Precisa ficar DEPOIS do polyfills.js -->
+  <script>
+    (function () {
+      if (typeof Promise.prototype.finally !== 'function') {
+        Promise.prototype.finally = function (onFinally) {
+          var P = this.constructor || Promise;
+          var fn = typeof onFinally === 'function' ? onFinally : function () {};
+          return this.then(
+            function (value) { return P.resolve(fn()).then(function () { return value; }); },
+            function (reason) { return P.resolve(fn()).then(function () { throw reason; }); }
+          );
+        };
+      }
+    })();
+  </script>
 
   <!-- The vendor js is generated during the build process
        It contains all of the dependencies in node_modules -->
