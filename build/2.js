@@ -612,36 +612,7 @@ var ListMasterPage = /** @class */ (function () {
                 _this.veiculoService.veiculos = data;
                 _this.veiculoService.limparMarcadores();
                 _this.veiculoService.veiculos.forEach(function (veiculo) {
-                    var marcador = new __WEBPACK_IMPORTED_MODULE_0__models_marcador__["a" /* Marcador */](veiculo.veiculoId, veiculo);
-                    if (_this.veiculoService.mapa != null) {
-                        var path = "assets/icon/car.png";
-                        if (veiculo.ignicao) {
-                            path = "assets/icon/car-ign.png";
-                        }
-                        var iconVeiculo = {
-                            url: path,
-                            size: {
-                                width: 25,
-                                height: 25
-                            }
-                        };
-                        var direction = ((veiculo.direcao) * 45);
-                        var metaMarker = {
-                            position: { lat: veiculo.latitude, lng: veiculo.longitude },
-                            icon: iconVeiculo,
-                            flat: true,
-                            rotation: direction
-                        };
-                        marcador.veiculo = veiculo;
-                        _this.veiculoService.mapa.addMarker(metaMarker).then(function (mark) {
-                            mark.on(__WEBPACK_IMPORTED_MODULE_9__ionic_native_google_maps__["b" /* GoogleMapsEvent */].MARKER_CLICK).subscribe(function () {
-                                var htmlInfoWindow = _this.getWindowsInfo(marcador.veiculo);
-                                htmlInfoWindow.open(mark);
-                            });
-                            marcador.marker = mark;
-                        });
-                    }
-                    _this.veiculoService.marcadores.set(veiculo.veiculoId, marcador);
+                    _this.veiculoService.desenharVeiculo(veiculo);
                 });
             }
         }, function (error) {
