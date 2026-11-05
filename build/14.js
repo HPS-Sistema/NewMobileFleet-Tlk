@@ -196,76 +196,9 @@ var MapaPage = /** @class */ (function () {
                     };
                 }
                 _this.veiculoService.mapa.moveCamera(options);
-                _this.veiculoService.marcadores.forEach(function (marca, key, marcadores) {
-                    var path = 'assets/icon/car.png';
-                    if (marca.veiculo.iconType == 2) {
-                        path = "assets/icon/custom/bus.png";
-                    }
-                    else if (marca.veiculo.iconType == 3) {
-                        path = "assets/icon/custom/forkfitft.png";
-                    }
-                    else if (marca.veiculo.iconType == 4) {
-                        path = "assets/icon/custom/ship.png";
-                    }
-                    else if (marca.veiculo.iconType == 5) {
-                        path = "assets/icon/custom/container.png";
-                    }
-                    else if (marca.veiculo.iconType == 6) {
-                        path = "assets/icon/custom/moto.png";
-                    }
-                    else {
-                        if (marca.veiculo.ignicao === null) {
-                            path = "assets/icon/icons8-inspecao-16.png";
-                        }
-                        else if (marca.veiculo.ignicao == true) {
-                            path = "assets/icon/car-ign.png";
-                        }
-                        else if (marca.veiculo.ignicao == false) {
-                            path = "assets/icon/car.png";
-                        }
-                    }
-                    var iconVeiculo = {
-                        url: path,
-                        size: {
-                            width: 30,
-                            height: 30
-                        }
-                    };
-                    var direction = 0;
-                    if (marca.veiculo.ignicao === null) {
-                        iconVeiculo = {
-                            url: "assets/icon/icons8-inspecao-16.png"
-                        };
-                    }
-                    else {
-                        direction = ((marca.veiculo.direcao) * 45);
-                    }
-                    var metaMarker = {
-                        position: {
-                            lat: marca.veiculo.latitude,
-                            lng: marca.veiculo.longitude
-                        },
-                        flat: true,
-                        rotation: direction,
-                        icon: iconVeiculo
-                    };
-                    _this.veiculoService.mapa
-                        .addMarker(metaMarker)
-                        .then(function (mark) {
-                        marca.marker = mark;
-                        mark.on(__WEBPACK_IMPORTED_MODULE_8__ionic_native_google_maps__["b" /* GoogleMapsEvent */].MARKER_CLICK).subscribe(function () {
-                            var htmlInfoWindow = _this.getWindowsInfo(marca.veiculo);
-                            if (marca.veiculo.ignicao === null) {
-                                htmlInfoWindow = _this.getWindowsInfoInpe(marca.veiculo);
-                            }
-                            htmlInfoWindow.open(mark);
-                        });
-                    })
-                        .catch(function (error) {
-                        console.log(error);
-                    });
-                });
-                loading.dismiss();
+                _this.veiculoService.redesenharTodos()
+                    .then(function () { loading.dismiss(); })
+                    .catch(function () { loading.dismiss(); });
             });
         });
     };
