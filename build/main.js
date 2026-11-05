@@ -130,92 +130,221 @@ var VeiculoService = /** @class */ (function () {
         }
       );
     }*/
+    // ===================== ICONES DOS VEICULOS =====================
+    // No navegador o plugin cordova-plugin-googlemaps ignora "rotation" em icones de imagem.
+    // Por isso a imagem e girada num canvas antes de ir para o marcador (funciona tambem no nativo).
+    VeiculoService.prototype._getPathIcone = function (veiculo) {
+        if (veiculo.ignicao === null) {
+            return 'assets/icon/icons8-inspecao-16.png';
+        }
+        switch (Number(veiculo.iconType)) {
+            case 2: return 'assets/icon/custom/bus.png';
+            case 3: return 'assets/icon/custom/forkfitft.png';
+            case 4: return 'assets/icon/custom/ship.png';
+            case 5: return 'assets/icon/custom/container.png';
+            case 6: return 'assets/icon/custom/moto.png';
+        }
+        return veiculo.ignicao ? 'assets/icon/car-ign.png' : 'assets/icon/car.png';
+    };
+    VeiculoService.prototype._getAngulo = function (veiculo) {
+        // direcao vem de 0 a 7 (N, NE, L, SE, S, SO, O, NO)
+        var d = Number(veiculo.direcao);
+        if (isNaN(d)) {
+            return 0;
+        }
+        return (((Math.round(d) % 8) + 8) % 8) * 45;
+    };
+    VeiculoService.prototype._rotacionarImagem = function (url, angulo, tamanho) {
+        var _this = this;
+        if (!this._cacheIcones) {
+            this._cacheIcones = new Map();
+        }
+        var chave = url + '|' + angulo + '|' + tamanho;
+        var promessa = this._cacheIcones.get(chave);
+        if (!promessa) {
+            promessa = new Promise(function (resolve) {
+                var img = new Image();
+                img.onload = function () {
+                    var lado = Math.ceil(tamanho * Math.SQRT2);
+                    var canvas = document.createElement('canvas');
+                    canvas.width = lado;
+                    canvas.height = lado;
+                    var ctx = canvas.getContext('2d');
+                    ctx.translate(lado / 2, lado / 2);
+                    ctx.rotate((angulo * Math.PI) / 180);
+                    ctx.drawImage(img, -tamanho / 2, -tamanho / 2, tamanho, tamanho);
+                    resolve(canvas.toDataURL('image/png'));
+                };
+                img.onerror = function () {
+                    _this._cacheIcones.delete(chave);
+                    resolve(null);
+                };
+                img.src = url;
+            });
+            this._cacheIcones.set(chave, promessa);
+        }
+        return promessa;
+    };
+    // Distancia aproximada em metros entre dois pontos
+    VeiculoService.prototype.distanciaMetros = function (lat1, lng1, lat2, lng2) {
+        var R = 6371000;
+        var rad = Math.PI / 180;
+        var dLat = (lat2 - lat1) * rad;
+        var dLng = (lng2 - lng1) * rad;
+        var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    };
+    // Rumo em graus (0 = Norte, sentido horario) indo do ponto 1 para o ponto 2
+    VeiculoService.prototype.rumoGraus = function (lat1, lng1, lat2, lng2) {
+        var rad = Math.PI / 180;
+        var y = Math.sin((lng2 - lng1) * rad) * Math.cos(lat2 * rad);
+        var x = Math.cos(lat1 * rad) * Math.sin(lat2 * rad) -
+            Math.sin(lat1 * rad) * Math.cos(lat2 * rad) * Math.cos((lng2 - lng1) * rad);
+        return ((Math.atan2(y, x) / rad) + 360) % 360;
+    };
+    // Angulo mais preciso pelo deslocamento entre dois pontos.
+    // So usa se andou o minimo e se bate com a direcao (0-7) que a API mandou (tolerancia 67,5 graus).
+    // Devolve null quando nao da para confiar (fica valendo a direcao da API).
+    VeiculoService.prototype.anguloPorDeslocamento = function (lat1, lng1, lat2, lng2, direcaoApi, distanciaMinima) {
+        lat1 = Number(lat1); lng1 = Number(lng1); lat2 = Number(lat2); lng2 = Number(lng2);
+        if ([lat1, lng1, lat2, lng2].some(function (n) { return isNaN(n); })) {
+            return null;
+        }
+        if (this.distanciaMetros(lat1, lng1, lat2, lng2) < distanciaMinima) {
+            return null;
+        }
+        var rumo = this.rumoGraus(lat1, lng1, lat2, lng2);
+        return this.bateComDirecaoApi(rumo, direcaoApi) ? rumo : null;
+    };
+    // true se o angulo (graus) esta a no maximo 67,5 graus da direcao 0-7 da API
+    VeiculoService.prototype.bateComDirecaoApi = function (angulo, direcaoApi) {
+        if (direcaoApi === null || direcaoApi === undefined || direcaoApi === '') {
+            return true; // sem direcao da API: confia no calculo
+        }
+        var d = Number(direcaoApi);
+        if (isNaN(d)) {
+            return true;
+        }
+        var diff = Math.abs(((angulo - (((Math.round(d) % 8) + 8) % 8) * 45) + 540) % 360 - 180);
+        return diff <= 67.5;
+    };
+    // Gira qualquer imagem (ex.: setas do rastro) e devolve o icone pronto
+    VeiculoService.prototype.getIconeGirado = function (url, angulo, tamanho) {
+        var a = ((Math.round(Number(angulo) / 5) * 5) % 360 + 360) % 360;
+        var simples = { url: url, size: { width: tamanho, height: tamanho }, anchor: [tamanho / 2, tamanho / 2] };
+        if (!a) {
+            return Promise.resolve(simples);
+        }
+        return this._rotacionarImagem(url, a, tamanho).then(function (dataUrl) {
+            if (!dataUrl) {
+                return simples;
+            }
+            var lado = Math.ceil(tamanho * Math.SQRT2);
+            return { url: dataUrl, size: { width: lado, height: lado }, anchor: [lado / 2, lado / 2] };
+        });
+    };
+    VeiculoService.prototype.getIconeVeiculo = function (veiculo, anguloCalculado) {
+        var url = this._getPathIcone(veiculo);
+        var tamanho = url.indexOf('icons8-inspecao') >= 0 ? 16 : 30;
+        // so o carro e visto de cima; onibus, moto, navio etc. sao de lado e nao giram
+        var girar = url === 'assets/icon/car.png' || url === 'assets/icon/car-ign.png';
+        var angulo = 0;
+        if (girar) {
+            angulo = (anguloCalculado !== null && anguloCalculado !== undefined) ? anguloCalculado : this._getAngulo(veiculo);
+        }
+        return this.getIconeGirado(url, angulo, tamanho);
+    };
+    // Cria o marcador do veiculo ou, se ja existir, atualiza posicao e icone.
+    VeiculoService.prototype.desenharVeiculo = function (veiculo) {
+        var _this = this;
+        if (!this._criandoMarcador) {
+            this._criandoMarcador = new Set();
+        }
+        var id = veiculo.veiculoId;
+        var marcador = this.marcadores.get(id);
+        if (!marcador) {
+            marcador = new __WEBPACK_IMPORTED_MODULE_0__models_marcador__["a" /* Marcador */](id, veiculo);
+            this.marcadores.set(id, marcador);
+        }
+        marcador.veiculo = veiculo;
+        if (this.mapa == null) {
+            return Promise.resolve(); // o mapa desenha quando abrir
+        }
+        // historico da ultima posicao (nao e apagado ao limpar marcadores)
+        if (!this._historicoPos) {
+            this._historicoPos = new Map();
+        }
+        var hist = this._historicoPos.get(id);
+        var anguloCalc = hist ? hist.angulo : null;
+        if (hist) {
+            var novo = this.anguloPorDeslocamento(hist.lat, hist.lng, veiculo.latitude, veiculo.longitude, veiculo.direcao, 40);
+            if (novo !== null) {
+                anguloCalc = novo;
+            }
+            else if (anguloCalc !== null && !this.bateComDirecaoApi(anguloCalc, veiculo.direcao)) {
+                anguloCalc = null; // a API indica outra direcao: volta a usar a da API
+            }
+        }
+        if (!hist || this.distanciaMetros(Number(hist.lat), Number(hist.lng), Number(veiculo.latitude), Number(veiculo.longitude)) >= 40) {
+            this._historicoPos.set(id, { lat: veiculo.latitude, lng: veiculo.longitude, angulo: anguloCalc });
+        }
+        else {
+            hist.angulo = anguloCalc;
+        }
+        var mapa = this.mapa;
+        return this.getIconeVeiculo(veiculo, anguloCalc).then(function (icone) {
+            var posicao = { lat: Number(veiculo.latitude), lng: Number(veiculo.longitude) };
+            if (marcador.marker) {
+                marcador.marker.setPosition(posicao);
+                marcador.marker.setIcon(icone);
+                return;
+            }
+            if (_this._criandoMarcador.has(id)) {
+                return;
+            }
+            _this._criandoMarcador.add(id);
+            return mapa.addMarker({ position: posicao, icon: icone, flat: true }).then(function (mark) {
+                _this._criandoMarcador.delete(id);
+                // se limparam os marcadores ou trocaram o mapa enquanto criava, descarta
+                if (_this.marcadores.get(id) !== marcador || _this.mapa !== mapa) {
+                    mark.remove();
+                    return;
+                }
+                marcador.marker = mark;
+                mark.on(__WEBPACK_IMPORTED_MODULE_6__ionic_native_google_maps__["b" /* GoogleMapsEvent */].MARKER_CLICK).subscribe(function () {
+                    var v = marcador.veiculo; // sempre o dado mais recente
+                    var info = v.ignicao === null ? _this.getWindowsInfoInpe(v) : _this.getWindowsInfo(v);
+                    info.open(mark);
+                });
+            });
+        }).catch(function (e) {
+            _this._criandoMarcador.delete(id);
+            console.log(e);
+        });
+    };
+    // Recria todos os marcadores (usado quando o mapa e criado).
+    VeiculoService.prototype.redesenharTodos = function () {
+        var _this = this;
+        var tarefas = [];
+        this.marcadores.forEach(function (m) {
+            m.marker = null;
+            tarefas.push(_this.desenharVeiculo(m.veiculo));
+        });
+        return Promise.all(tarefas);
+    };
     VeiculoService.prototype.iniciarTimeDataStore = function () {
         var _this = this;
-        this.subscribeTimeDataStore = Object(__WEBPACK_IMPORTED_MODULE_7_rxjs_observable_interval__["interval"])(90000).subscribe(function (pacote) {
+        this.pararTimeDataStore(); // evita dois timers rodando juntos
+        this.subscribeTimeDataStore = Object(__WEBPACK_IMPORTED_MODULE_7_rxjs_observable_interval__["interval"])(90000).subscribe(function () {
             _this.getVeiculos(_this.ultimoFiltro).subscribe(function (data) {
-                if (data.length) {
+                if (data && data.length) {
                     _this.veiculos = data;
                     _this.veiculos.forEach(function (veiculo) {
-                        var marcador = _this.marcadores.get(veiculo.veiculoId);
-                        //const marcador = new Marcador(veiculo.veiculoId, veiculo);
-                        if (_this.mapa != null) {
-                            var path = "assets/icon/car.png";
-                            if (veiculo.iconType == 2) {
-                                path = "assets/icon/custom/bus.png";
-                            }
-                            else if (veiculo.iconType == 3) {
-                                path = "assets/icon/custom/forkfitft.png";
-                            }
-                            else if (veiculo.iconType == 4) {
-                                path = "assets/icon/custom/ship.png";
-                            }
-                            else if (veiculo.iconType == 5) {
-                                path = "assets/icon/custom/container.png";
-                            }
-                            else if (veiculo.iconType == 6) {
-                                path = "assets/icon/custom/moto.png";
-                            }
-                            else {
-                                if (veiculo.ignicao == true) {
-                                    path = "assets/icon/car-ign.png";
-                                }
-                                else if (veiculo.ignicao == false) {
-                                    path = "assets/icon/car.png";
-                                }
-                            }
-                            var iconVeiculo = {
-                                url: path,
-                                size: {
-                                    width: 30,
-                                    height: 30
-                                }
-                            };
-                            var direction = 0;
-                            if (veiculo.ignicao === null) {
-                                iconVeiculo = {
-                                    url: "assets/icon/icons8-inspecao-16.png"
-                                };
-                            }
-                            else {
-                                direction = (veiculo.direcao) * 45;
-                            }
-                            if (marcador == null) {
-                                var marcador_1 = new __WEBPACK_IMPORTED_MODULE_0__models_marcador__["a" /* Marcador */](veiculo.veiculoId, veiculo);
-                                var metaMarker = {
-                                    position: { lat: veiculo.latitude, lng: veiculo.longitude },
-                                    icon: iconVeiculo,
-                                    flat: true,
-                                    rotation: direction
-                                };
-                                _this.mapa.addMarker(metaMarker).then(function (mark) {
-                                    mark.on(__WEBPACK_IMPORTED_MODULE_6__ionic_native_google_maps__["b" /* GoogleMapsEvent */].MARKER_CLICK).subscribe(function () {
-                                        var htmlInfoWindow = _this.getWindowsInfo(marcador_1.veiculo);
-                                        if (veiculo.ignicao === null) {
-                                            htmlInfoWindow = _this.getWindowsInfoInpe(marcador_1.veiculo);
-                                        }
-                                        htmlInfoWindow.open(mark);
-                                    });
-                                    marcador_1.marker = mark;
-                                });
-                            }
-                            else {
-                                marcador.marker.setPosition({
-                                    lat: veiculo.latitude,
-                                    lng: veiculo.longitude
-                                });
-                                marcador.veiculo = veiculo;
-                                marcador.marker.setIcon(iconVeiculo);
-                                marcador.marker.setRotation(direction);
-                            }
-                        }
-                        _this.marcadores.set(veiculo.veiculoId, marcador);
+                        _this.desenharVeiculo(veiculo);
                     });
                 }
             }, function (error) {
-                //refresher.complete();
-            }, function () {
-                //refresher.complete();
             });
         });
     };
@@ -303,7 +432,7 @@ var VeiculoService = /** @class */ (function () {
         }
         var velocidade = new __WEBPACK_IMPORTED_MODULE_8__pipes_velocidade_pipe__["a" /* VelocidadePipe */](this.translateService).transform(veiculo.velocidade);
         var location = veiculo.posicao;
-        var dh = new __WEBPACK_IMPORTED_MODULE_9__angular_common__["d" /* DatePipe */]("pt-br").transform(veiculo.dh, 'dd/MM/yyyy HH:mm:ss');
+        var dh = new __WEBPACK_IMPORTED_MODULE_9__angular_common__["d" /* DatePipe */]("en-US").transform(veiculo.dh, 'dd/MM/yyyy HH:mm:ss');
         var htmlInfoWindow = new __WEBPACK_IMPORTED_MODULE_6__ionic_native_google_maps__["d" /* HtmlInfoWindow */]();
         var frame = document.createElement('div');
         frame.innerHTML = [
@@ -323,7 +452,7 @@ var VeiculoService = /** @class */ (function () {
     };
     VeiculoService.prototype.getWindowsInfoInpe = function (pontoSeta) {
         var location = pontoSeta.posicao;
-        var dh = new __WEBPACK_IMPORTED_MODULE_9__angular_common__["d" /* DatePipe */]("pt-br").transform(pontoSeta.dh, 'dd/MM/yyyy HH:mm:ss');
+        var dh = new __WEBPACK_IMPORTED_MODULE_9__angular_common__["d" /* DatePipe */]("en-US").transform(pontoSeta.dh, 'dd/MM/yyyy HH:mm:ss');
         var htmlInfoWindow = new __WEBPACK_IMPORTED_MODULE_6__ionic_native_google_maps__["d" /* HtmlInfoWindow */]();
         var frame = document.createElement('div');
         frame.innerHTML = [
@@ -346,12 +475,15 @@ var VeiculoService = /** @class */ (function () {
     VeiculoService.prototype.limparMarcadores = function () {
         if (this.mapa != null) {
             this.marcadores.forEach(function (marca) {
-                if (marca.marker !== undefined && marca.marker !== null) {
+                if (marca.marker) {
                     marca.marker.remove();
                 }
             });
         }
         this.marcadores.clear();
+        if (this._criandoMarcador) {
+            this._criandoMarcador.clear();
+        }
     };
     Object.defineProperty(VeiculoService.prototype, "getSelectVeiculo", {
         get: function () {
