@@ -432,83 +432,56 @@ var RastroPage = /** @class */ (function () {
                         });
                         ;
                         var ponto = _this.rastro[_this.rastro.length - 1];
-                        var path = "assets/icon/car.png";
-                        if (_this.veiculo.iconType == 2) {
-                            path = "assets/icon/custom/bus.png";
-                        }
-                        else if (_this.veiculo.iconType == 3) {
-                            path = "assets/icon/custom/forkfitft.png";
-                        }
-                        else if (_this.veiculo.iconType == 4) {
-                            path = "assets/icon/custom/ship.png";
-                        }
-                        else if (_this.veiculo.iconType == 5) {
-                            path = "assets/icon/custom/container.png";
-                        }
-                        else if (_this.veiculo.iconType == 6) {
-                            path = "assets/icon/custom/moto.png";
-                        }
-                        else {
-                            if (ponto.ignicao == true) {
-                                path = "assets/icon/car-ign.png";
-                            }
-                            else if (ponto.ignicao == false) {
-                                path = "assets/icon/car.png";
+                        var vs = _this.veiculoService;
+                        // angulo do veiculo: pelo ultimo trecho do rastro (se der), senao a direcao da API
+                        var anguloFim = null;
+                        for (var k = _this.rastro.length - 2; k >= 0 && anguloFim === null; k--) {
+                            if (vs.distanciaMetros(Number(_this.rastro[k].latitude), Number(_this.rastro[k].longitude), Number(ponto.latitude), Number(ponto.longitude)) >= 15) {
+                                anguloFim = vs.anguloPorDeslocamento(_this.rastro[k].latitude, _this.rastro[k].longitude, ponto.latitude, ponto.longitude, ponto.direcao, 15);
+                                break;
                             }
                         }
-                        var iconVeiculo = {
-                            url: path,
-                            size: {
-                                width: 30,
-                                height: 30
-                            }
-                        };
-                        var direction = (ponto.direcao * 45);
-                        var metaMarker2 = {
-                            position: {
-                                lat: ponto.latitude,
-                                lng: ponto.longitude
-                            },
-                            flat: true,
-                            rotation: direction,
-                            icon: iconVeiculo
-                        };
-                        _this.mapa.addMarker(metaMarker2).then(function (mark) {
+                        var veiculoFim = Object.assign({}, ponto, { iconType: _this.veiculo ? _this.veiculo.iconType : ponto.iconType });
+                        if (veiculoFim.ignicao === null) { veiculoFim.ignicao = false; } // no rastro nao usa icone de inspecao
+                        vs.getIconeVeiculo(veiculoFim, anguloFim).then(function (iconVeiculo) {
+                            return _this.mapa.addMarker({
+                                position: { lat: ponto.latitude, lng: ponto.longitude },
+                                flat: true,
+                                icon: iconVeiculo,
+                                zIndex: 10
+                            });
+                        }).then(function (mark) {
                             mark.on(__WEBPACK_IMPORTED_MODULE_8__ionic_native_google_maps__["b" /* GoogleMapsEvent */].MARKER_CLICK).subscribe(function () {
                                 var htmlInfoWindow = _this.getWindowsInfo(ponto);
                                 htmlInfoWindow.open(mark);
                             });
-                        });
+                        }).catch(function (e) { console.log(e); });
                         _this.rastro.forEach(function (pontoSeta, index) {
                             if (index != 0 && index != _this.rastro.length - 1) {
-                                var pathSeta = 'assets/icon/seta_off.png';
-                                if (pontoSeta.ignicao) {
-                                    pathSeta = 'assets/icon/seta_on.png';
+                                var pathSeta = pontoSeta.ignicao ? 'assets/icon/seta_on.png' : 'assets/icon/seta_off.png';
+                                // angulo da seta: pelo trecho ate o proximo ponto (se der), senao a direcao da API
+                                var prox = _this.rastro[index + 1];
+                                var anguloSeta = vs.anguloPorDeslocamento(pontoSeta.latitude, pontoSeta.longitude, prox.latitude, prox.longitude, pontoSeta.direcao, 15);
+                                if (anguloSeta === null) {
+                                    var ant = _this.rastro[index - 1];
+                                    anguloSeta = vs.anguloPorDeslocamento(ant.latitude, ant.longitude, pontoSeta.latitude, pontoSeta.longitude, pontoSeta.direcao, 15);
                                 }
-                                var iconVeiculoSeta = {
-                                    url: pathSeta,
-                                    size: {
-                                        width: 30,
-                                        height: 30
-                                    }
-                                };
-                                var directionSeta = (pontoSeta.direcao * 45);
-                                var directionMarker = {
-                                    position: {
-                                        lat: pontoSeta.latitude,
-                                        lng: pontoSeta.longitude
-                                    },
-                                    flat: true,
-                                    rotation: directionSeta,
-                                    icon: iconVeiculoSeta,
-                                    anchor: [5, 0]
-                                };
-                                _this.mapa.addMarker(directionMarker).then(function (mark) {
+                                if (anguloSeta === null) {
+                                    var d = Number(pontoSeta.direcao);
+                                    anguloSeta = isNaN(d) ? 0 : (((Math.round(d) % 8) + 8) % 8) * 45;
+                                }
+                                vs.getIconeGirado(pathSeta, anguloSeta, 30).then(function (iconSeta) {
+                                    return _this.mapa.addMarker({
+                                        position: { lat: pontoSeta.latitude, lng: pontoSeta.longitude },
+                                        flat: true,
+                                        icon: iconSeta
+                                    });
+                                }).then(function (mark) {
                                     mark.on(__WEBPACK_IMPORTED_MODULE_8__ionic_native_google_maps__["b" /* GoogleMapsEvent */].MARKER_CLICK).subscribe(function () {
                                         var htmlInfoWindow = _this.getWindowsInfo(pontoSeta);
                                         htmlInfoWindow.open(mark);
                                     });
-                                });
+                                }).catch(function (e) { console.log(e); });
                             }
                         });
                     });
