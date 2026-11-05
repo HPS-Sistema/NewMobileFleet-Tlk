@@ -130,9 +130,6 @@ var VeiculoService = /** @class */ (function () {
         }
       );
     }*/
-    // ===================== ICONES DOS VEICULOS =====================
-    // No navegador o plugin cordova-plugin-googlemaps ignora "rotation" em icones de imagem.
-    // Por isso a imagem e girada num canvas antes de ir para o marcador (funciona tambem no nativo).
     VeiculoService.prototype._getPathIcone = function (veiculo) {
         if (veiculo.ignicao === null) {
             return 'assets/icon/icons8-inspecao-16.png';
@@ -147,7 +144,6 @@ var VeiculoService = /** @class */ (function () {
         return veiculo.ignicao ? 'assets/icon/car-ign.png' : 'assets/icon/car.png';
     };
     VeiculoService.prototype._getAngulo = function (veiculo) {
-        // direcao vem de 0 a 7 (N, NE, L, SE, S, SO, O, NO)
         var d = Number(veiculo.direcao);
         if (isNaN(d)) {
             return 0;
@@ -185,7 +181,6 @@ var VeiculoService = /** @class */ (function () {
         }
         return promessa;
     };
-    // Distancia aproximada em metros entre dois pontos
     VeiculoService.prototype.distanciaMetros = function (lat1, lng1, lat2, lng2) {
         var R = 6371000;
         var rad = Math.PI / 180;
@@ -195,7 +190,6 @@ var VeiculoService = /** @class */ (function () {
             Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
         return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     };
-    // Rumo em graus (0 = Norte, sentido horario) indo do ponto 1 para o ponto 2
     VeiculoService.prototype.rumoGraus = function (lat1, lng1, lat2, lng2) {
         var rad = Math.PI / 180;
         var y = Math.sin((lng2 - lng1) * rad) * Math.cos(lat2 * rad);
@@ -203,9 +197,6 @@ var VeiculoService = /** @class */ (function () {
             Math.sin(lat1 * rad) * Math.cos(lat2 * rad) * Math.cos((lng2 - lng1) * rad);
         return ((Math.atan2(y, x) / rad) + 360) % 360;
     };
-    // Angulo mais preciso pelo deslocamento entre dois pontos.
-    // So usa se andou o minimo e se bate com a direcao (0-7) que a API mandou (tolerancia 67,5 graus).
-    // Devolve null quando nao da para confiar (fica valendo a direcao da API).
     VeiculoService.prototype.anguloPorDeslocamento = function (lat1, lng1, lat2, lng2, direcaoApi, distanciaMinima) {
         lat1 = Number(lat1); lng1 = Number(lng1); lat2 = Number(lat2); lng2 = Number(lng2);
         if ([lat1, lng1, lat2, lng2].some(function (n) { return isNaN(n); })) {
@@ -217,10 +208,9 @@ var VeiculoService = /** @class */ (function () {
         var rumo = this.rumoGraus(lat1, lng1, lat2, lng2);
         return this.bateComDirecaoApi(rumo, direcaoApi) ? rumo : null;
     };
-    // true se o angulo (graus) esta a no maximo 67,5 graus da direcao 0-7 da API
     VeiculoService.prototype.bateComDirecaoApi = function (angulo, direcaoApi) {
         if (direcaoApi === null || direcaoApi === undefined || direcaoApi === '') {
-            return true; // sem direcao da API: confia no calculo
+            return true;
         }
         var d = Number(direcaoApi);
         if (isNaN(d)) {
@@ -229,7 +219,6 @@ var VeiculoService = /** @class */ (function () {
         var diff = Math.abs(((angulo - (((Math.round(d) % 8) + 8) % 8) * 45) + 540) % 360 - 180);
         return diff <= 67.5;
     };
-    // Gira qualquer imagem (ex.: setas do rastro) e devolve o icone pronto
     VeiculoService.prototype.getIconeGirado = function (url, angulo, tamanho) {
         var a = ((Math.round(Number(angulo) / 5) * 5) % 360 + 360) % 360;
         var simples = { url: url, size: { width: tamanho, height: tamanho }, anchor: [tamanho / 2, tamanho / 2] };
@@ -247,7 +236,6 @@ var VeiculoService = /** @class */ (function () {
     VeiculoService.prototype.getIconeVeiculo = function (veiculo, anguloCalculado) {
         var url = this._getPathIcone(veiculo);
         var tamanho = url.indexOf('icons8-inspecao') >= 0 ? 16 : 30;
-        // so o carro e visto de cima; onibus, moto, navio etc. sao de lado e nao giram
         var girar = url === 'assets/icon/car.png' || url === 'assets/icon/car-ign.png';
         var angulo = 0;
         if (girar) {
@@ -255,7 +243,6 @@ var VeiculoService = /** @class */ (function () {
         }
         return this.getIconeGirado(url, angulo, tamanho);
     };
-    // Cria o marcador do veiculo ou, se ja existir, atualiza posicao e icone.
     VeiculoService.prototype.desenharVeiculo = function (veiculo) {
         var _this = this;
         if (!this._criandoMarcador) {
@@ -269,9 +256,8 @@ var VeiculoService = /** @class */ (function () {
         }
         marcador.veiculo = veiculo;
         if (this.mapa == null) {
-            return Promise.resolve(); // o mapa desenha quando abrir
+            return Promise.resolve();
         }
-        // historico da ultima posicao (nao e apagado ao limpar marcadores)
         if (!this._historicoPos) {
             this._historicoPos = new Map();
         }
@@ -283,7 +269,7 @@ var VeiculoService = /** @class */ (function () {
                 anguloCalc = novo;
             }
             else if (anguloCalc !== null && !this.bateComDirecaoApi(anguloCalc, veiculo.direcao)) {
-                anguloCalc = null; // a API indica outra direcao: volta a usar a da API
+                anguloCalc = null;
             }
         }
         if (!hist || this.distanciaMetros(Number(hist.lat), Number(hist.lng), Number(veiculo.latitude), Number(veiculo.longitude)) >= 40) {
@@ -306,14 +292,13 @@ var VeiculoService = /** @class */ (function () {
             _this._criandoMarcador.add(id);
             return mapa.addMarker({ position: posicao, icon: icone, flat: true }).then(function (mark) {
                 _this._criandoMarcador.delete(id);
-                // se limparam os marcadores ou trocaram o mapa enquanto criava, descarta
                 if (_this.marcadores.get(id) !== marcador || _this.mapa !== mapa) {
                     mark.remove();
                     return;
                 }
                 marcador.marker = mark;
                 mark.on(__WEBPACK_IMPORTED_MODULE_6__ionic_native_google_maps__["b" /* GoogleMapsEvent */].MARKER_CLICK).subscribe(function () {
-                    var v = marcador.veiculo; // sempre o dado mais recente
+                    var v = marcador.veiculo;
                     var info = v.ignicao === null ? _this.getWindowsInfoInpe(v) : _this.getWindowsInfo(v);
                     info.open(mark);
                 });
@@ -323,7 +308,6 @@ var VeiculoService = /** @class */ (function () {
             console.log(e);
         });
     };
-    // Recria todos os marcadores (usado quando o mapa e criado).
     VeiculoService.prototype.redesenharTodos = function () {
         var _this = this;
         var tarefas = [];
@@ -335,7 +319,7 @@ var VeiculoService = /** @class */ (function () {
     };
     VeiculoService.prototype.iniciarTimeDataStore = function () {
         var _this = this;
-        this.pararTimeDataStore(); // evita dois timers rodando juntos
+        this.pararTimeDataStore();
         this.subscribeTimeDataStore = Object(__WEBPACK_IMPORTED_MODULE_7_rxjs_observable_interval__["interval"])(90000).subscribe(function () {
             _this.getVeiculos(_this.ultimoFiltro).subscribe(function (data) {
                 if (data && data.length) {
@@ -370,6 +354,10 @@ var VeiculoService = /** @class */ (function () {
             }
             _this.localNotifications.schedule(localNotification);
         });
+    };
+    VeiculoService.prototype._traduzir = function (chave) {
+        var texto = this.translateService.instant(chave);
+        return (texto && texto !== chave) ? texto : chave;
     };
     VeiculoService.prototype.getWindowsInfo = function (veiculo) {
         var dir = '';
@@ -436,13 +424,13 @@ var VeiculoService = /** @class */ (function () {
         var htmlInfoWindow = new __WEBPACK_IMPORTED_MODULE_6__ionic_native_google_maps__["d" /* HtmlInfoWindow */]();
         var frame = document.createElement('div');
         frame.innerHTML = [
-            '<div>' + this.directionString + ': ' + dir + '</div>',
-            '<div>' + this.dateTimeString + ': ' + dh + '</div>',
-            '<div>' + this.placaString + ': ' + veiculo.placa + '</div>',
-            '<div>' + this.speedString + ': ' + velocidade + '</div>',
+            '<div>' + this._traduzir("DIRECTION") + ': ' + dir + '</div>',
+            '<div>' + this._traduzir("DATETIME") + ': ' + dh + '</div>',
+            '<div>' + this._traduzir("PLATE") + ': ' + veiculo.placa + '</div>',
+            '<div>' + this._traduzir("SPEED") + ': ' + velocidade + '</div>',
             '<div>Latitude: ' + veiculo.latitude.toFixed(5) + '</div>',
             '<div>Longitude: ' + veiculo.longitude.toFixed(5) + '</div>',
-            '<div>' + this.locationString + ': ' + location + '</div>',
+            '<div>' + this._traduzir("LOCATION") + ': ' + location + '</div>',
         ].join("");
         htmlInfoWindow.setContent(frame, {
             width: "250px",
@@ -456,7 +444,7 @@ var VeiculoService = /** @class */ (function () {
         var htmlInfoWindow = new __WEBPACK_IMPORTED_MODULE_6__ionic_native_google_maps__["d" /* HtmlInfoWindow */]();
         var frame = document.createElement('div');
         frame.innerHTML = [
-            '<div>' + this.dateTimeString + ': ' + dh + '</div>',
+            '<div>' + this._traduzir("DATETIME") + ': ' + dh + '</div>',
             '<div>Latitude: ' + pontoSeta.latitude.toFixed(5) + '</div>',
             '<div>Longitude: ' + pontoSeta.longitude.toFixed(5) + '</div>',
             '<div>' + location + '</div>',
